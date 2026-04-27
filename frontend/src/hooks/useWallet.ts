@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import SignClient from "@walletconnect/sign-client";
 
 // ── Freighter types ───────────────────────────────────────────────────────────
@@ -23,6 +23,7 @@ export interface WalletState {
   networkPassphrase: string | null;
   connected: boolean;
   connecting: boolean;
+  txLoading: boolean;
   walletType: WalletType | null;
   error: string | null;
 }
@@ -43,6 +44,7 @@ export function useWallet() {
     networkPassphrase: null,
     connected: false,
     connecting: false,
+    txLoading: false,
     walletType: null,
     error: null,
   });
@@ -95,6 +97,46 @@ export function useWallet() {
       }));
     }
   }, []);
+
+  // ── Freighter account-change detection ─────────────────────────────────────
+  // Poll Freighter every 2 s while connected to detect mid-session account switches.
+
+  useEffect(() => {
+    if (state.walletType !== "freighter" || !state.connected) return;
+
+    const interval = setInterval(async () => {
+      if (!window.freighter) return;
+      try {
+        const currentKey = await window.freighter.getPublicKey();
+        if (currentKey !== state.publicKey) {
+          // Account switched — update state and clear cached data
+          const { networkPassphrase } = await window.freighter.getNetwork();
+          setState({
+            publicKey: currentKey,
+            networkPassphrase,
+            connected: true,
+            connecting: false,
+            walletType: "freighter",
+            txLoading: false,
+            error: null,
+          });
+        }
+      } catch {
+        // Freighter became unavailable — disconnect gracefully
+        setState({
+          publicKey: null,
+          networkPassphrase: null,
+          connected: false,
+          connecting: false,
+          walletType: null,
+          txLoading: false,
+          error: null,
+        });
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [state.walletType, state.connected, state.publicKey]);
 
   // ── WalletConnect ───────────────────────────────────────────────────────────
 
@@ -213,28 +255,33 @@ export function useWallet() {
     async (xdr: string): Promise<string> => {
       if (!state.connected) throw new Error("Wallet not connected");
 
-      if (state.walletType === "walletconnect") {
-        if (!wcClientRef.current || !wcTopicRef.current) {
-          throw new Error("WalletConnect session not available");
+      setState((s) => ({ ...s, txLoading: true }));
+      try {
+        if (state.walletType === "walletconnect") {
+          if (!wcClientRef.current || !wcTopicRef.current) {
+            throw new Error("WalletConnect session not available");
+          }
+          const result = await wcClientRef.current.request<{ signedXDR: string }>({
+            topic: wcTopicRef.current,
+            chainId: STELLAR_CHAIN,
+            request: {
+              method: "stellar_signXDR",
+              params: { xdr },
+            },
+          });
+          return result.signedXDR;
         }
-        const result = await wcClientRef.current.request<{ signedXDR: string }>({
-          topic: wcTopicRef.current,
-          chainId: STELLAR_CHAIN,
-          request: {
-            method: "stellar_signXDR",
-            params: { xdr },
-          },
-        });
-        return result.signedXDR;
-      }
 
-      // Freighter
-      if (!window.freighter || !state.networkPassphrase) {
-        throw new Error("Freighter not available");
+        // Freighter
+        if (!window.freighter || !state.networkPassphrase) {
+          throw new Error("Freighter not available");
+        }
+        return await window.freighter.signTransaction(xdr, {
+          networkPassphrase: state.networkPassphrase,
+        });
+      } finally {
+        setState((s) => ({ ...s, txLoading: false }));
       }
-      return window.freighter.signTransaction(xdr, {
-        networkPassphrase: state.networkPassphrase,
-      });
     },
     [state.connected, state.walletType, state.networkPassphrase]
   );

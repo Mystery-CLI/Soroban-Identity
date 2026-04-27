@@ -219,6 +219,7 @@ cd contracts && cargo build --target wasm32-unknown-unknown --release
 # 3. Deploy to testnet (set your secret key first)
 export STELLAR_SECRET_KEY=S...
 bash scripts/deploy.sh
+# Contract IDs are saved to deployed.env in the repo root (git-ignored)
 
 # 4. Install and run the frontend
 cd frontend && npm install && npm run dev
@@ -226,6 +227,33 @@ cd frontend && npm install && npm run dev
 # 5. Install and build the SDK
 cd sdk && npm install && npm run build
 ```
+
+### Deployment Configuration
+
+The `scripts/deploy.sh` script supports configurable network and RPC endpoint via environment variables:
+
+```bash
+# Deploy to testnet (default)
+export STELLAR_SECRET_KEY=S...
+bash scripts/deploy.sh
+
+# Deploy to mainnet
+export STELLAR_SECRET_KEY=S...
+export STELLAR_NETWORK=mainnet
+export STELLAR_RPC_URL=https://soroban-mainnet.stellar.org
+bash scripts/deploy.sh
+
+# Deploy to custom network
+export STELLAR_SECRET_KEY=S...
+export STELLAR_NETWORK=custom
+export STELLAR_RPC_URL=https://your-rpc-endpoint.com
+bash scripts/deploy.sh
+```
+
+**Environment Variables:**
+- `STELLAR_NETWORK` — Network name (default: `testnet`). Can be `testnet`, `mainnet`, or a custom network name.
+- `STELLAR_RPC_URL` — RPC endpoint URL (default: `https://soroban-testnet.stellar.org`).
+- `STELLAR_SECRET_KEY` — Your Stellar secret key (required). Used to sign transactions and deploy contracts.
 
 ---
 
@@ -256,7 +284,7 @@ cd sdk && npm install && npm run build
 
 ## Contributing
 
-PRs are welcome. Please open an issue first to discuss what you'd like to change.
+PRs are welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md) for branch naming, commit style, local setup, and the PR checklist.
 
 ---
 

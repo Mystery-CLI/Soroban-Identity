@@ -9,7 +9,7 @@ interface Props {
 }
 
 export default function WalletButton({ wallet }: Props) {
-  const { publicKey, connected, connecting, walletType, error, connect, disconnect } = wallet;
+  const { publicKey, connected, connecting, txLoading, walletType, error, connect, disconnect } = wallet;
   const [showPicker, setShowPicker] = useState(false);
 
   const short = (key: string) => `${key.slice(0, 4)}…${key.slice(-4)}`;
@@ -23,15 +23,22 @@ export default function WalletButton({ wallet }: Props) {
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "0.25rem", position: "relative" }}>
       {connected && publicKey ? (
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
             via {walletType === "walletconnect" ? "WalletConnect" : "Freighter"}
           </span>
-          <span className="badge badge-green">{short(publicKey)}</span>
+          <span className="badge badge-green" title={publicKey} style={{ cursor: "pointer" }}>
+            {short(publicKey)}
+          </span>
           <button
             onClick={disconnect}
-            style={{ background: "transparent", border: "1px solid #334155", color: "#94a3b8", padding: "0.3rem 0.7rem" }}
+            disabled={txLoading}
+            style={{ background: "transparent", border: "1px solid var(--border-input)", color: "var(--text-muted)", padding: "0.3rem 0.7rem" }}
           >
-            Disconnect
+            {txLoading ? (
+              <span style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                <span className="spinner" aria-hidden="true" /> Transaction pending…
+              </span>
+            ) : "Disconnect"}
           </button>
         </div>
       ) : (
@@ -48,8 +55,8 @@ export default function WalletButton({ wallet }: Props) {
               position: "absolute",
               top: "calc(100% + 0.5rem)",
               right: 0,
-              background: "#1e293b",
-              border: "1px solid #334155",
+              background: "var(--dropdown-bg)",
+              border: "1px solid var(--border-input)",
               borderRadius: "0.5rem",
               padding: "0.5rem",
               display: "flex",
@@ -76,7 +83,16 @@ export default function WalletButton({ wallet }: Props) {
       )}
 
       {error && (
-        <span style={{ fontSize: "0.75rem", color: "#fca5a5" }}>{error}</span>
+        <span style={{ fontSize: "0.75rem", color: "var(--error-text)" }}>
+          {error.toLowerCase().includes("freighter not found") ? (
+            <>Freighter not installed.{" "}
+              <a href="https://freighter.app" target="_blank" rel="noopener noreferrer"
+                style={{ color: "var(--accent-light)", textDecoration: "underline" }}>
+                Install it here
+              </a>
+            </>
+          ) : error}
+        </span>
       )}
     </div>
   );

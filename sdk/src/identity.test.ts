@@ -42,6 +42,9 @@ vi.mock('@stellar/stellar-sdk', () => ({
   },
   nativeToScVal: vi.fn().mockReturnValue({}),
   scValToNative: vi.fn().mockImplementation((v) => v),
+  StrKey: {
+    isValidEd25519PublicKey: (addr: string) => typeof addr === 'string' && addr.startsWith('G'),
+  },
 }));
 
 const config: SorobanIdentityConfig = {
@@ -49,6 +52,7 @@ const config: SorobanIdentityConfig = {
   networkPassphrase: 'Test SDF Network ; September 2015',
   identityRegistryId: 'CONTRACT_A',
   credentialManagerId: 'CONTRACT_B',
+  reputationId: 'CONTRACT_C',
 };
 
 describe('IdentityClient', () => {
@@ -108,5 +112,49 @@ describe('IdentityClient', () => {
     const result = await client.hasActiveDid('GABC');
 
     expect(result).toBe(false);
+  });
+
+  it('createDid — happy path returns the new DID string', async () => {
+    // Bypass the real 2s polling delay
+    (client as any).waitForConfirmation = vi.fn().mockResolvedValue({
+      returnValue: 'did:stellar:GABC',
+    });
+
+    const keypair = { publicKey: () => 'GABC', sign: vi.fn() } as any;
+
+    const result = await client.createDid(keypair, { service: 'https://example.com' });
+
+    expect(result.did).toBe('did:stellar:GABC');
+  });
+
+  it('createDid — throws descriptive error when DID already exists', async () => {
+    (client as any).waitForConfirmation = vi.fn().mockRejectedValue(
+      new Error('DID already exists for this address')
+    );
+
+    const keypair = { publicKey: () => 'GABC', sign: vi.fn() } as any;
+
+    await expect(client.createDid(keypair)).rejects.toThrow(
+      'A DID already exists for address GABC'
+    );
+  });
+
+  it('resolveDid — throws InvalidAddress for an invalid address', async () => {
+    await expect(client.resolveDid('not-valid')).rejects.toThrow('InvalidAddress');
+  });
+
+  it('hasActiveDid — throws InvalidAddress for an invalid address', async () => {
+    await expect(client.hasActiveDid('bad')).rejects.toThrow('InvalidAddress');
+  });
+
+  it('getStorageStats — returns decoded stats on success', async () => {
+    const mockStats = { totalDids: 5, activeDids: 3 };
+    mockIsSimulationError.mockReturnValue(false);
+    mockSimulateTransaction.mockResolvedValue({ result: { retval: {} } });
+    const { scValToNative } = await import('@stellar/stellar-sdk');
+    (scValToNative as ReturnType<typeof vi.fn>).mockReturnValue(mockStats);
+
+    const result = await client.getStorageStats('GCALLER');
+    expect(result).toEqual(mockStats);
   });
 });

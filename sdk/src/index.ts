@@ -1,13 +1,23 @@
 export { IdentityClient } from "./identity";
 export { CredentialClient } from "./credentials";
 export { ReputationClient } from "./reputation";
+export { SorobanEventListener } from "./events";
+export { retryWithBackoff, validateStellarAddress } from "./utils";
 export type {
   DidDocument,
   Credential,
   CredentialType,
-  SorobanIdentityConfig,
+  VerifyResult,
+  VerifyFailReason,
+  CallOptions,
+  IdentityStorageStats,
+  CredentialStorageStats,
+  ReputationStorageStats,
 } from "./types";
 export type { ReputationRecord, ScoreHistoryEntry } from "./reputation";
+export type { EventFilter, ContractEvent } from "./events";
+import type { SorobanIdentityConfig } from "./types";
+export type { SorobanIdentityConfig };
 
 // Testnet defaults — fill contract IDs after deployment
 export const TESTNET_CONFIG: SorobanIdentityConfig = {

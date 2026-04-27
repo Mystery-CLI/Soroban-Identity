@@ -7,7 +7,8 @@ import {
   nativeToScVal,
   scValToNative,
 } from "@stellar/stellar-sdk";
-import type { SorobanIdentityConfig } from "./types";
+import type { CallOptions, ReputationStorageStats, SorobanIdentityConfig, WriteResult } from "./types";
+import { retryWithBackoff, validateStellarAddress, pollTransactionStatus } from "./utils";
 
 export interface ReputationRecord {
   subject: string;
@@ -34,9 +35,38 @@ export class ReputationClient {
     this.contract = new Contract(config.reputationId);
   }
 
-  /** Get the reputation record for a subject. */
-  async getReputation(callerAddress: string, subjectAddress: string): Promise<ReputationRecord> {
+  /** Get the list of all registered reporters. */
+  async getReporters(callerAddress: string, options?: CallOptions): Promise<string[]> {
+    validateStellarAddress(callerAddress);
     const account = await this.server.getAccount(callerAddress);
+    const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
+
+    const tx = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: this.config.networkPassphrase,
+    })
+      .addOperation(
+        this.contract.call("get_reporters_list")
+      )
+      .setTimeout(timeout)
+      .build();
+
+    const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
+    if (SorobanRpc.Api.isSimulationError(result)) {
+      throw new Error(`Simulation failed: ${result.error}`);
+    }
+
+    return scValToNative(
+      (result as SorobanRpc.Api.SimulateTransactionSuccessResponse).result!.retval
+    ) as string[];
+  }
+
+  /** Get the reputation record for a subject. Returns a zero record if the subject has no history. */
+  async getReputation(callerAddress: string, subjectAddress: string, options?: CallOptions): Promise<ReputationRecord> {
+    validateStellarAddress(callerAddress);
+    validateStellarAddress(subjectAddress);
+    const account = await this.server.getAccount(callerAddress);
+    const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,
@@ -48,12 +78,23 @@ export class ReputationClient {
           nativeToScVal(subjectAddress, { type: "address" })
         )
       )
-      .setTimeout(this.config.txTimeout ?? 30)
+      .setTimeout(timeout)
       .build();
 
-    const result = await this.server.simulateTransaction(tx);
+    const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
     if (SorobanRpc.Api.isSimulationError(result)) {
-      throw new Error(`Simulation failed: ${result.error}`);
+      const errMsg: string = (result as { error: string }).error ?? "";
+      // Contract returns a default record for unknown subjects — a simulation error here
+      // means the subject truly has no record. Return the zero default instead of throwing.
+      if (
+        errMsg.includes("not found") ||
+        errMsg.includes("no record") ||
+        errMsg.includes("MissingValue") ||
+        errMsg.includes("KeyNotFound")
+      ) {
+        return { subject: subjectAddress, score: 0, reporterCount: 0, updatedAt: 0 };
+      }
+      throw new Error(`Simulation failed: ${errMsg}`);
     }
 
     return scValToNative(
@@ -75,9 +116,14 @@ export class ReputationClient {
     subjectAddress: string,
     reporterAddress: string,
     offset = 0,
-    limit = 20
+    limit = 20,
+    options?: CallOptions
   ): Promise<ScoreHistoryEntry[]> {
+    validateStellarAddress(callerAddress);
+    validateStellarAddress(subjectAddress);
+    validateStellarAddress(reporterAddress);
     const account = await this.server.getAccount(callerAddress);
+    const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,
@@ -92,10 +138,10 @@ export class ReputationClient {
           nativeToScVal(limit, { type: "u32" })
         )
       )
-      .setTimeout(this.config.txTimeout ?? 30)
+      .setTimeout(timeout)
       .build();
 
-    const result = await this.server.simulateTransaction(tx);
+    const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
     if (SorobanRpc.Api.isSimulationError(result)) {
       throw new Error(`Simulation failed: ${result.error}`);
     }
@@ -105,14 +151,50 @@ export class ReputationClient {
     ) as ScoreHistoryEntry[];
   }
 
+  /** Check if a subject passes the sybil threshold using the contract's stored default. */
+  async passesSybilCheckDefault(
+    callerAddress: string,
+    subjectAddress: string,
+    options?: CallOptions
+  ): Promise<boolean> {
+    validateStellarAddress(callerAddress);
+    validateStellarAddress(subjectAddress);
+    const account = await this.server.getAccount(callerAddress);
+    const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
+
+    const tx = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: this.config.networkPassphrase,
+    })
+      .addOperation(
+        this.contract.call(
+          "passes_sybil_check_default",
+          nativeToScVal(subjectAddress, { type: "address" })
+        )
+      )
+      .setTimeout(timeout)
+      .build();
+
+    const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
+    if (SorobanRpc.Api.isSimulationError(result)) return false;
+
+    return scValToNative(
+      (result as SorobanRpc.Api.SimulateTransactionSuccessResponse).result!.retval
+    ) as boolean;
+  }
+
   /** Check if a subject passes the sybil threshold. */
   async passesSybilCheck(
     callerAddress: string,
     subjectAddress: string,
     minScore: number,
-    minReporters: number
+    minReporters: number,
+    options?: CallOptions
   ): Promise<boolean> {
+    validateStellarAddress(callerAddress);
+    validateStellarAddress(subjectAddress);
     const account = await this.server.getAccount(callerAddress);
+    const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,
@@ -126,10 +208,10 @@ export class ReputationClient {
           nativeToScVal(minReporters, { type: "u32" })
         )
       )
-      .setTimeout(this.config.txTimeout ?? 30)
+      .setTimeout(timeout)
       .build();
 
-    const result = await this.server.simulateTransaction(tx);
+    const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
     if (SorobanRpc.Api.isSimulationError(result)) return false;
 
     return scValToNative(
@@ -142,9 +224,11 @@ export class ReputationClient {
     reporterKeypair: Keypair,
     subjectAddress: string,
     delta: number,
-    reason: string
-  ): Promise<void> {
+    reason: string,
+    options?: CallOptions
+  ): Promise<WriteResult> {
     const account = await this.server.getAccount(reporterKeypair.publicKey());
+    const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
       fee: BASE_FEE,
@@ -159,15 +243,44 @@ export class ReputationClient {
           nativeToScVal(reason, { type: "string" })
         )
       )
-      .setTimeout(this.config.txTimeout ?? 30)
+      .setTimeout(timeout)
       .build();
 
-    const prepared = await this.server.prepareTransaction(tx);
+    const prepared = await retryWithBackoff(() => this.server.prepareTransaction(tx));
+    const estimatedFee = parseInt(prepared.fee, 10);
+    const estimatedFeeXlm = (estimatedFee / 10_000_000).toFixed(7);
     prepared.sign(reporterKeypair);
 
-    const result = await this.server.sendTransaction(prepared);
+    const result = await retryWithBackoff(() => this.server.sendTransaction(prepared));
     if (result.status !== "PENDING") {
       throw new Error(`Transaction failed: ${result.status}`);
     }
+    
+    await pollTransactionStatus(this.server, result.hash);
+    return { estimatedFee, estimatedFeeXlm };
+  }
+
+  /** Get storage usage statistics for the reputation contract. */
+  async getStorageStats(callerAddress: string, options?: CallOptions): Promise<ReputationStorageStats> {
+    validateStellarAddress(callerAddress);
+    const account = await this.server.getAccount(callerAddress);
+    const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
+
+    const tx = new TransactionBuilder(account, {
+      fee: BASE_FEE,
+      networkPassphrase: this.config.networkPassphrase,
+    })
+      .addOperation(this.contract.call("get_storage_stats"))
+      .setTimeout(timeout)
+      .build();
+
+    const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
+    if (SorobanRpc.Api.isSimulationError(result)) {
+      throw new Error(`Simulation failed: ${result.error}`);
+    }
+
+    return scValToNative(
+      (result as SorobanRpc.Api.SimulateTransactionSuccessResponse).result!.retval
+    ) as ReputationStorageStats;
   }
 }
