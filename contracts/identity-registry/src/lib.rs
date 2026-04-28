@@ -279,12 +279,12 @@ impl IdentityRegistry {
         let mut result = prefix.as_bytes();
         result.extend_from_slice(&addr_str.as_bytes());
         let did = String::from_bytes(env, &result);
-        
+
         // Validate the format
         if !Self::validate_did_format(env, &did) {
             panic!("Invalid DID format constructed");
         }
-        
+
         did
     }
 
@@ -364,15 +364,15 @@ mod tests {
         let metadata: Map<String, String> = Map::new(&env);
 
         let did_id = client.create_did(&user, &metadata);
-        
+
         // Test that the DID format is valid
         assert!(IdentityRegistry::validate_did_format(&env, &did_id));
-        
+
         // Test the exact format: did:stellar:<address>
         let did_str = did_id.to_string();
         assert!(did_str.starts_with("did:stellar:"));
         assert!(did_str.len() > "did:stellar:".len());
-        
+
         // The address part should match the controller
         let expected_addr = user.to_string();
         let addr_part = &did_str["did:stellar:".len()..];
