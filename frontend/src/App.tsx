@@ -47,6 +47,10 @@ export default function App() {
     }
   }, []);
 
+  const network = getActiveNetwork();
+  const networkConfig = getNetworkConfig(network);
+  const onMainnet = isMainnet(network);
+
   // Check RPC connection health on load
   useEffect(() => {
     const checkRpcHealth = async () => {
@@ -56,7 +60,7 @@ export default function App() {
       setIsConnected(healthy);
     };
     checkRpcHealth();
-  }, []);
+  }, [networkConfig.rpcUrl]);
 
   // Mock fetch — replace with CredentialClient.getCredentialsBySubject() when wired
   const fetchCredentials = useCallback(
@@ -153,6 +157,26 @@ export default function App() {
           <WalletButton wallet={wallet} />
         </div>
       </header>
+
+      {onMainnet && (
+        <div
+          role="alert"
+          aria-label="Mainnet warning"
+          style={{
+            background: "var(--badge-red-bg)",
+            color: "var(--badge-red-text)",
+            border: "1px solid var(--badge-red-text)",
+            borderRadius: "0.5rem",
+            padding: "0.6rem 1rem",
+            marginBottom: "1rem",
+            fontSize: "0.9rem",
+            fontWeight: 600,
+          }}
+        >
+          ⚠ You are connected to Stellar <strong>mainnet</strong>. All actions submit real
+          transactions and may incur on-chain fees.
+        </div>
+      )}
 
       {notification && !notification.dismissed && (
         <div
