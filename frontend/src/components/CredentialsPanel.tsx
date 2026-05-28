@@ -3,6 +3,7 @@ import type { CredentialType } from "../../../sdk/src/types";
 import type { WalletState } from "../hooks/useWallet";
 import { validateStellarAddress } from "../../../sdk/src/utils";
 import SkeletonCard from "./SkeletonCard";
+import { formatTimestamp } from "../utils/formatDate";
 
 interface Props {
   wallet: WalletState & {
@@ -455,6 +456,16 @@ export default function CredentialsPanel({ wallet, verifyId }: Props) {
                 </div>
                 {expandedCredId === cred.id && (
                   <div style={{ padding: "0.75rem 1rem", borderTop: "1px solid var(--border-input)", background: "var(--card-bg-accent)" }}>
+                    <dl style={{ margin: "0 0 0.75rem", fontSize: "0.8rem" }}>
+                      <div style={{ display: "flex", gap: "1rem", marginBottom: "0.25rem" }}>
+                        <dt style={{ fontWeight: 600, color: "var(--text-muted)", minWidth: "120px" }}>Issued</dt>
+                        <dd style={{ margin: 0, color: "var(--text-muted)" }}>{formatTimestamp(cred.issuedAt)}</dd>
+                      </div>
+                      <div style={{ display: "flex", gap: "1rem", marginBottom: "0.5rem" }}>
+                        <dt style={{ fontWeight: 600, color: "var(--text-muted)", minWidth: "120px" }}>Expires</dt>
+                        <dd style={{ margin: 0, ...getExpiryStyle(cred.expiresAt) }}>{formatTimestamp(cred.expiresAt)}</dd>
+                      </div>
+                    </dl>
                     {Object.keys(cred.claims).length > 0 ? (
                       <dl style={{ margin: 0, fontSize: "0.85rem" }}>
                         {Object.entries(cred.claims).map(([key, value]) => (

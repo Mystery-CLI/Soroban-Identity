@@ -3,9 +3,11 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { WalletState } from '../hooks/useWallet';
 import type { ReputationRecord } from '../../../sdk/src/reputation';
 import type { ScoreHistoryEntry } from '../../../sdk/src/reputation';
+import type { DidDocument } from '../../../sdk/src/types';
 import { useAddressHistory } from '../hooks/useAddressHistory';
 import SkeletonCard from './SkeletonCard';
 import ReputationChart from './ReputationChart';
+import { formatTimestamp } from '../utils/formatDate';
 
 interface Props {
   wallet: WalletState & {
@@ -53,7 +55,7 @@ export default function IdentityPanel({ wallet }: Props) {
   // resolveAddress is considered "loaded" once a resolve has succeeded
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(false);
-  const [resolvedDoc, setResolvedDoc] = useState<object | null>(null);
+  const [resolvedDoc, setResolvedDoc] = useState<DidDocument | null>(null);
   const [copied, setCopied] = useState(false);
 
   const isNetworkError = (error: unknown): boolean => {
@@ -76,7 +78,7 @@ export default function IdentityPanel({ wallet }: Props) {
     try {
       // TODO: wire IdentityClient.resolveDid() from SDK
       await new Promise((r) => setTimeout(r, 800));
-      const mock = {
+      const mock: DidDocument = {
         id: `did:stellar:${resolveAddress}`,
         controller: resolveAddress,
         metadata: {},
@@ -347,6 +349,13 @@ export default function IdentityPanel({ wallet }: Props) {
               </button>
             </div>
             <pre className="result">{resolveResult}</pre>
+            {resolvedDoc && (
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.5rem', lineHeight: 1.6 }}>
+                <span><strong>Created:</strong> {formatTimestamp(resolvedDoc.createdAt)}</span>
+                <br />
+                <span><strong>Updated:</strong> {formatTimestamp(resolvedDoc.updatedAt)}</span>
+              </div>
+            )}
           </>
         )}
 
@@ -388,10 +397,7 @@ export default function IdentityPanel({ wallet }: Props) {
             <h3 style={{ marginBottom: '0.5rem', color: 'var(--accent-light)' }}>Reputation</h3>
             <p>Score: {reputation.score}</p>
             <p>Reporters: {reputation.reporterCount}</p>
-            <p>
-              Last updated:{' '}
-              {new Date(reputation.updatedAt * 1000).toLocaleDateString()}
-            </p>
+            <p>Last updated: {formatTimestamp(reputation.updatedAt)}</p>
             <h4 style={{ marginTop: '1rem', marginBottom: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
               Score History
             </h4>
