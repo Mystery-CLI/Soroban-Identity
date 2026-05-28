@@ -8,6 +8,12 @@ export {
   checkConnection,
   validateStellarAddress,
 } from './utils';
+export { ContractError } from './errors';
+export {
+  IDENTITY_REGISTRY_ERRORS,
+  CREDENTIAL_MANAGER_ERRORS,
+  REPUTATION_ERRORS,
+} from './error-codes';
 export type {
   DidDocument,
   Credential,

@@ -9,6 +9,8 @@ import {
 } from "@stellar/stellar-sdk";
 import type { CallOptions, DidDocument, IdentityStorageStats, SorobanIdentityConfig, WriteResult } from "./types";
 import { retryWithBackoff, validateStellarAddress, pollTransactionStatus } from "./utils";
+import { ContractError } from "./errors";
+import { IDENTITY_REGISTRY_ERRORS } from "./error-codes";
 
 export class IdentityClient {
   private server: SorobanRpc.Server;
@@ -150,6 +152,8 @@ export class IdentityClient {
     const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
     if (SorobanRpc.Api.isSimulationError(result)) {
       const errMsg = result.error ?? "";
+      const contractErr = ContractError.extract(errMsg, IDENTITY_REGISTRY_ERRORS);
+      if (contractErr) throw contractErr;
       if (errMsg.includes("DidDeactivated")) {
         throw new Error(`DID for address ${controllerAddress} has been deactivated.`);
       }
@@ -214,6 +218,9 @@ export class IdentityClient {
 
     const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
     if (SorobanRpc.Api.isSimulationError(result)) {
+      const errMsg = result.error ?? "";
+      const contractErr = ContractError.extract(errMsg, IDENTITY_REGISTRY_ERRORS);
+      if (contractErr) throw contractErr;
       throw new Error("Failed to get DID count");
     }
 
@@ -277,7 +284,10 @@ export class IdentityClient {
 
     const result = await retryWithBackoff(() => this.server.simulateTransaction(tx));
     if (SorobanRpc.Api.isSimulationError(result)) {
-      throw new Error(`Simulation failed: ${result.error}`);
+      const errMsg = result.error ?? "";
+      const contractErr = ContractError.extract(errMsg, IDENTITY_REGISTRY_ERRORS);
+      if (contractErr) throw contractErr;
+      throw new Error(`Simulation failed: ${errMsg}`);
     }
 
     return scValToNative(
