@@ -4,6 +4,15 @@ import { RequestQueue } from "./request-queue";
 
 const serverCache = new Map<string, SorobanRpc.Server>();
 
+/**
+ * Returns a process-wide singleton {@link SorobanRpc.Server} for a given RPC URL.
+ *
+ * Repeated clients pointing at the same RPC share the same underlying server
+ * instance, avoiding redundant socket setup and ledger metadata fetches.
+ *
+ * @param rpcUrl Soroban RPC URL (e.g. `https://soroban-testnet.stellar.org`).
+ * @returns Cached `SorobanRpc.Server`.
+ */
 export function getOrCreateServer(rpcUrl: string): SorobanRpc.Server {
   if (!serverCache.has(rpcUrl)) {
     serverCache.set(rpcUrl, new SorobanRpc.Server(rpcUrl));
@@ -11,6 +20,11 @@ export function getOrCreateServer(rpcUrl: string): SorobanRpc.Server {
   return serverCache.get(rpcUrl)!;
 }
 
+/**
+ * Drop all cached {@link SorobanRpc.Server} instances.
+ *
+ * Call between integration test runs to avoid leaking state across suites.
+ */
 export function clearServerCache(): void {
   serverCache.clear();
 }
