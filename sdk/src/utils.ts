@@ -1,4 +1,4 @@
-import { StrKey, SorobanRpc, hash } from "@stellar/stellar-sdk";
+import { StrKey, SorobanRpc, hash, Address } from "@stellar/stellar-sdk";
 import type { CredentialType } from "./types";
 import { SorobanIdentityError } from "./errors";
 
@@ -40,9 +40,16 @@ export async function retryWithBackoff<T>(
 export async function pollTransactionStatus(
   server: SorobanRpc.Server,
   hash: string,
-  maxAttempts = 10,
-  intervalMs = 2000
+  options?: {
+    maxAttempts?: number;
+    intervalMs?: number;
+    exponentialBackoff?: boolean;
+  }
 ): Promise<void> {
+  const maxAttempts = options?.maxAttempts ?? 10;
+  const exponentialBackoff = options?.exponentialBackoff ?? true;
+  let intervalMs = options?.intervalMs ?? 2000;
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     await delay(intervalMs);
     const status = await server.getTransaction(hash);
@@ -52,6 +59,10 @@ export async function pollTransactionStatus(
     }
     if (status.status === SorobanRpc.Api.GetTransactionStatus.FAILED) {
       throw new SorobanIdentityError(`Transaction failed on-chain: ${(status as any).resultXdr || 'unknown error'}`, "CONTRACT_ERROR");
+    }
+
+    if (exponentialBackoff) {
+      intervalMs *= 2;
     }
   }
   throw new SorobanIdentityError("Transaction confirmation timeout", "NETWORK_ERROR");
@@ -126,6 +137,18 @@ export function computeCredentialId(
   subject: string,
   credentialType: CredentialType
 ): string {
-  const input = [issuer, subject, credentialType].join(":");
-  return Buffer.from(hash(Buffer.from(input))).toString("hex");
+  const typeTag = credentialType === "Kyc" ? 0 :
+                  credentialType === "Reputation" ? 1 :
+                  credentialType === "Achievement" ? 2 : 3;
+  
+  const issuerXdr = new Address(issuer).toScAddress().toXDR();
+  const subjectXdr = new Address(subject).toScAddress().toXDR();
+  
+  const data = Buffer.concat([
+    issuerXdr,
+    subjectXdr,
+    Buffer.from([typeTag])
+  ]);
+  
+  return Buffer.from(hash(data)).toString("hex");
 }

@@ -5,6 +5,7 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, xdr::ToXdr, Address, Bytes,
     BytesN, Env, Map, String, Symbol, Vec,
 };
+use soroban_sdk::xdr::ToXdr;
 
 /// Version returned by `ping` for deployment health checks.
 pub const CONTRACT_VERSION: u32 = 1;
@@ -702,8 +703,6 @@ impl CredentialManager {
             .unwrap_or_else(|| Vec::new(env))
     }
 
-    /// Derive a deterministic 32-byte credential ID from issuer + subject + credential_type.
-    /// Uses the Soroban-native sha256 over the XDR-serialised addresses and a type tag byte.
     fn derive_id(
         env: &Env,
         issuer: &Address,

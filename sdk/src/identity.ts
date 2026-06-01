@@ -6,6 +6,7 @@ import {
   Keypair,
   nativeToScVal,
   scValToNative,
+  Account,
 } from "@stellar/stellar-sdk";
 import type { CallOptions, DidDocument, IdentityStorageStats, SorobanIdentityConfig, WriteResult } from "./types";
 import { retryWithBackoff, validateStellarAddress, pollTransactionStatus } from "./utils";
@@ -45,7 +46,7 @@ export class IdentityClient extends BaseClient {
   async isInitialized(): Promise<boolean> {
     try {
       return await this.executeWithFailover(async (server) => {
-        const account = await server.getAccount(PROBE_ADDRESS);
+        const account = new Account(PROBE_ADDRESS, "0");
       const tx = new TransactionBuilder(account, {
         fee: BASE_FEE,
         networkPassphrase: this.config.networkPassphrase,
@@ -130,7 +131,11 @@ export class IdentityClient extends BaseClient {
     }
 
     try {
-      await pollTransactionStatus(this.server, result.hash);
+      await pollTransactionStatus(this.server, result.hash, {
+        maxAttempts: this.config.pollingRetries,
+        intervalMs: this.config.pollingIntervalMs,
+        exponentialBackoff: this.config.pollingExponentialBackoff,
+      });
       const confirmed = await this.server.getTransaction(result.hash) as SorobanRpc.Api.GetSuccessfulTransactionResponse;
       const did = scValToNative(confirmed.returnValue!) as string;
       return { did, estimatedFee, estimatedFeeXlm };
@@ -192,7 +197,11 @@ export class IdentityClient extends BaseClient {
     }
 
     try {
-      await pollTransactionStatus(this.server, result.hash);
+      await pollTransactionStatus(this.server, result.hash, {
+        maxAttempts: this.config.pollingRetries,
+        intervalMs: this.config.pollingIntervalMs,
+        exponentialBackoff: this.config.pollingExponentialBackoff,
+      });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("DID not found")) {
@@ -224,7 +233,7 @@ export class IdentityClient extends BaseClient {
    */
   async resolveDid(controllerAddress: string, options?: CallOptions): Promise<DidDocument> {
     validateStellarAddress(controllerAddress);
-    const account = await this.server.getAccount(controllerAddress);
+    const account = new Account(controllerAddress, "0");
     const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
@@ -272,7 +281,7 @@ export class IdentityClient extends BaseClient {
    */
   async hasActiveDid(controllerAddress: string, options?: CallOptions): Promise<boolean> {
     validateStellarAddress(controllerAddress);
-    const account = await this.server.getAccount(controllerAddress);
+    const account = new Account(controllerAddress, "0");
     const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
@@ -310,7 +319,7 @@ export class IdentityClient extends BaseClient {
    * @throws {SorobanIdentityError} on simulation failure.
    */
   async getDidCount(options?: CallOptions): Promise<number> {
-    const account = await this.server.getAccount(this.config.identityRegistryId);
+    const account = new Account(this.config.identityRegistryId, "0");
     const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
@@ -385,7 +394,11 @@ export class IdentityClient extends BaseClient {
       throw new SorobanIdentityError(`Transaction failed: ${result.status}`, "CONTRACT_ERROR");
     }
 
-    await pollTransactionStatus(this.server, result.hash);
+    await pollTransactionStatus(this.server, result.hash, {
+      maxAttempts: this.config.pollingRetries,
+      intervalMs: this.config.pollingIntervalMs,
+      exponentialBackoff: this.config.pollingExponentialBackoff,
+    });
   }
 
   /**
@@ -398,7 +411,7 @@ export class IdentityClient extends BaseClient {
    */
   async getStorageStats(callerAddress: string, options?: CallOptions): Promise<IdentityStorageStats> {
     validateStellarAddress(callerAddress);
-    const account = await this.server.getAccount(callerAddress);
+    const account = new Account(callerAddress, "0");
     const timeout = options?.timeoutSeconds ?? this.config.txTimeout ?? 30;
 
     const tx = new TransactionBuilder(account, {
