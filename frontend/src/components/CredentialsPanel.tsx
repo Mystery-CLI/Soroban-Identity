@@ -169,15 +169,16 @@ export default function CredentialsPanel({ verifyId }: { verifyId?: string | nul
 
   const [searchAddress, setSearchAddress] = useState("");
 
-  const handleVerify = async () => {
-    if (!credId.trim()) return;
+  const handleVerify = async (credentialId?: string) => {
+    const id = (credentialId ?? credId).trim();
+    if (!id) return;
     setVerifying(true);
     setVerifyState("idle");
     try {
       const networkConfig = getNetworkConfig();
       const credentialClient = new CredentialClient(networkConfig);
       const caller = wallet.publicKey || "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
-      const result = await credentialClient.verifyCredential(caller, credId.trim());
+      const result = await credentialClient.verifyCredential(caller, id);
       setVerifyState(result.valid ? "valid" : result.reason || "invalid");
     } catch {
       setVerifyState("invalid");
@@ -196,11 +197,11 @@ export default function CredentialsPanel({ verifyId }: { verifyId?: string | nul
     const checkIssuerStatus = async () => {
       setCheckingIssuer(true);
       try {
-        // TODO: wire CredentialClient.isIssuer() from SDK
-        // For now, mock the check
-        await new Promise((r) => setTimeout(r, 300));
-        // Mock: assume addresses starting with specific pattern are issuers
-        setIsIssuer(wallet.publicKey?.startsWith("G") ?? false);
+        const networkConfig = getNetworkConfig();
+        const credentialClient = new CredentialClient(networkConfig);
+        const caller = wallet.publicKey || "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
+        const issuer = await credentialClient.isIssuer(caller, wallet.publicKey!);
+        setIsIssuer(issuer);
       } catch {
         setIsIssuer(false);
       } finally {
@@ -213,13 +214,9 @@ export default function CredentialsPanel({ verifyId }: { verifyId?: string | nul
 
   // Handle deep link verification
   useEffect(() => {
-    if (verifyId) {
-      setCredId(verifyId);
-      // Trigger verification after a short delay to ensure state is set
-      setTimeout(() => {
-        handleVerify();
-      }, 100);
-    }
+    if (!verifyId) return;
+    setCredId(verifyId);
+    void handleVerify(verifyId);
   }, [verifyId]);
 
   const handleSearch = async () => {
@@ -553,7 +550,7 @@ export default function CredentialsPanel({ verifyId }: { verifyId?: string | nul
           value={credId}
           onChange={(e) => setCredId(e.target.value)}
         />
-        <button onClick={handleVerify} disabled={verifying || !credId}>
+        <button onClick={() => void handleVerify()} disabled={verifying || !credId}>
           {verifying ? "Verifying…" : "Verify"}
         </button>
         {verifying && <SkeletonCard rows={2} />}
