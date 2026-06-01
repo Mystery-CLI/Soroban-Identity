@@ -24,6 +24,16 @@ import { retryWithBackoff, validateStellarAddress, pollTransactionStatus } from 
 import { ContractError, SorobanIdentityError } from "./errors";
 import { CREDENTIAL_MANAGER_ERRORS } from "./error-codes";
 import { BaseClient } from "./base-client";
+import {
+  buildIssueCredentialArgs,
+  buildVerifyCredentialArgs,
+  buildGetCredentialArgs,
+  buildGetSubjectCredentialsArgs,
+  buildIsIssuerArgs,
+  buildGetCredentialCountArgs,
+  buildListSubjectCredentialsArgs,
+  buildListIssuersArgs,
+} from "./contract-args";
 
 const PROBE_ADDRESS = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
 const CREDENTIAL_VERIFY_NOT_FOUND_CODE = 2;
@@ -68,7 +78,7 @@ export class CredentialClient extends BaseClient {
         .addOperation(
           this.contract.call(
             "is_issuer",
-            nativeToScVal(PROBE_ADDRESS, { type: "address" })
+            ...buildIsIssuerArgs({ address: PROBE_ADDRESS })
           )
         )
         .setTimeout(10)
@@ -163,13 +173,15 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           "issue_credential",
-          nativeToScVal(issuerKeypair.publicKey(), { type: "address" }),
-          nativeToScVal(subjectAddress, { type: "address" }),
-          nativeToScVal(credentialType, { type: "symbol" }),
-          nativeToScVal(claims, { type: "map" }),
-          nativeToScVal(Buffer.from(claimsHashHex, "hex"), { type: "bytes" }),
-          nativeToScVal(signature, { type: "bytes" }),
-          nativeToScVal(expiresAt, { type: "u64" })
+          ...buildIssueCredentialArgs({
+            issuer: issuerKeypair.publicKey(),
+            subject: subjectAddress,
+            credentialType,
+            claims,
+            claimsHash: Buffer.from(claimsHashHex, "hex"),
+            signature: Buffer.from(signature),
+            expiresAt,
+          })
         )
       )
       .setTimeout(timeout)
@@ -230,7 +242,7 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           "verify_credential",
-          nativeToScVal(idBytes, { type: "bytes" })
+          ...buildVerifyCredentialArgs({ credentialId: idBytes })
         )
       )
       .setTimeout(timeout)
@@ -309,7 +321,7 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           "get_subject_credentials",
-          nativeToScVal(subjectAddress, { type: "address" })
+          ...buildGetSubjectCredentialsArgs({ subject: subjectAddress })
         )
       )
       .setTimeout(timeout)
@@ -371,7 +383,7 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           "get_credential",
-          nativeToScVal(idBytes, { type: "bytes" })
+          ...buildGetCredentialArgs({ credentialId: idBytes })
         )
       )
       .setTimeout(timeout)
@@ -427,7 +439,7 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           "is_issuer",
-          nativeToScVal(targetAddress, { type: "address" })
+          ...buildIsIssuerArgs({ address: targetAddress })
         )
       )
       .setTimeout(timeout)
@@ -504,7 +516,7 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           "get_credential_count",
-          nativeToScVal(subjectAddress, { type: "address" })
+          ...buildGetCredentialCountArgs({ subject: subjectAddress })
         )
       )
       .setTimeout(timeout)
@@ -669,10 +681,12 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'list_subject_credentials',
-          nativeToScVal(subjectAddress, { type: 'address' }),
-          cursorArg,
-          nativeToScVal(options?.limit ?? 0, { type: 'u32' }),
-          filterArg
+          ...buildListSubjectCredentialsArgs({
+            subject: subjectAddress,
+            cursor: cursorArg,
+            limit: options?.limit ?? 0,
+            filter: filterArg,
+          })
         )
       )
       .setTimeout(timeout)
@@ -726,8 +740,10 @@ export class CredentialClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'list_issuers',
-          cursorArg,
-          nativeToScVal(options?.limit ?? 0, { type: 'u32' })
+          ...buildListIssuersArgs({
+            cursor: cursorArg,
+            limit: options?.limit ?? 0,
+          })
         )
       )
       .setTimeout(timeout)

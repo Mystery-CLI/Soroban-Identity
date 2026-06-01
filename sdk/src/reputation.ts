@@ -25,6 +25,15 @@ import { SorobanTransactionBuilder } from './transaction-builder';
 import { ContractError, SorobanIdentityError } from "./errors";
 import { REPUTATION_ERRORS } from './error-codes';
 import { BaseClient } from './base-client';
+import {
+  buildGetReputationArgs,
+  buildGetHistoryArgs,
+  buildPassesSybilCheckDefaultArgs,
+  buildPassesSybilCheckArgs,
+  buildSubmitScoreArgs,
+  buildListReportersArgs,
+  buildListHistoryArgs,
+} from './contract-args';
 
 const PROBE_ADDRESS = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN";
 
@@ -59,14 +68,9 @@ export interface ScoreHistoryEntry {
  */
 export class ReputationClient extends BaseClient {
   /**
-   * @param config SDK config; `reputationId` MUST be set or the constructor throws.
-   * @throws {SorobanIdentityError} with code `VALIDATION_ERROR` when
-   *   `config.reputationId` is missing.
+   * @param config SDK config including the deployed reputation contract ID.
    */
   constructor(config: SorobanIdentityConfig) {
-    if (!config.reputationId) {
-      throw new SorobanIdentityError('reputationId is required for ReputationClient', 'VALIDATION_ERROR');
-    }
     super(config, config.reputationId);
   }
 
@@ -82,7 +86,7 @@ export class ReputationClient extends BaseClient {
           .addOperation(
             this.contract.call(
               'passes_sybil_check_default',
-              nativeToScVal(PROBE_ADDRESS, { type: 'address' })
+              ...buildPassesSybilCheckDefaultArgs({ subject: PROBE_ADDRESS })
             )
           )
           .setTimeout(10)
@@ -183,7 +187,7 @@ export class ReputationClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'get_reputation',
-          nativeToScVal(subjectAddress, { type: 'address' })
+          ...buildGetReputationArgs({ subject: subjectAddress })
         )
       )
       .setTimeout(timeout)
@@ -257,10 +261,12 @@ export class ReputationClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'get_history',
-          nativeToScVal(subjectAddress, { type: 'address' }),
-          nativeToScVal(reporterAddress, { type: 'address' }),
-          nativeToScVal(offset, { type: 'u32' }),
-          nativeToScVal(limit, { type: 'u32' })
+          ...buildGetHistoryArgs({
+            subject: subjectAddress,
+            reporter: reporterAddress,
+            offset,
+            limit,
+          })
         )
       )
       .setTimeout(timeout)
@@ -311,7 +317,7 @@ export class ReputationClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'passes_sybil_check_default',
-          nativeToScVal(subjectAddress, { type: 'address' })
+          ...buildPassesSybilCheckDefaultArgs({ subject: subjectAddress })
         )
       )
       .setTimeout(timeout)
@@ -362,9 +368,7 @@ export class ReputationClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'passes_sybil_check',
-          nativeToScVal(subjectAddress, { type: 'address' }),
-          nativeToScVal(minScore, { type: 'i64' }),
-          nativeToScVal(minReporters, { type: 'u32' })
+          ...buildPassesSybilCheckArgs({ subject: subjectAddress, minScore, minReporters })
         )
       )
       .setTimeout(timeout)
@@ -410,12 +414,14 @@ export class ReputationClient extends BaseClient {
     // Use the transaction builder for construction
     const builder = new SorobanTransactionBuilder(account, this.config);
     builder.addContractCall(
-      this.config.reputationId!,
+      this.config.reputationId,
       'submit_score',
-      nativeToScVal(reporterKeypair.publicKey(), { type: 'address' }),
-      nativeToScVal(subjectAddress, { type: 'address' }),
-      nativeToScVal(delta, { type: 'i64' }),
-      nativeToScVal(reason, { type: 'string' })
+      ...buildSubmitScoreArgs({
+        reporter: reporterKeypair.publicKey(),
+        subject: subjectAddress,
+        delta,
+        reason,
+      })
     );
 
     const tx = builder.build(timeout);
@@ -527,8 +533,7 @@ export class ReputationClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'list_reporters',
-          cursorArg,
-          nativeToScVal(options?.limit ?? 0, { type: 'u32' })
+          ...buildListReportersArgs({ cursor: cursorArg, limit: options?.limit ?? 0 })
         )
       )
       .setTimeout(timeout)
@@ -586,10 +591,12 @@ export class ReputationClient extends BaseClient {
       .addOperation(
         this.contract.call(
           'list_history',
-          nativeToScVal(subjectAddress, { type: 'address' }),
-          nativeToScVal(reporterAddress, { type: 'address' }),
-          cursorArg,
-          nativeToScVal(options?.limit ?? 0, { type: 'u32' })
+          ...buildListHistoryArgs({
+            subject: subjectAddress,
+            reporter: reporterAddress,
+            cursor: cursorArg,
+            limit: options?.limit ?? 0,
+          })
         )
       )
       .setTimeout(timeout)
