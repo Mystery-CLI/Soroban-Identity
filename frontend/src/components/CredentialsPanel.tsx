@@ -6,6 +6,7 @@ import { validateStellarAddress } from "../../../sdk/src/utils";
 import { getNetworkConfig } from '../network';
 import SkeletonCard from "./SkeletonCard";
 import { formatTimestamp } from "../utils/formatDate";
+import { handleError } from "../utils/handleError";
 import { useWalletContext } from "../context/WalletContext";
 
 type VerifyState =
@@ -243,7 +244,7 @@ export default function CredentialsPanel({ verifyId }: { verifyId?: string | nul
       const results = await credentialClient.getCredentialsBySubject(caller, addr);
       dispatchCredential({ type: 'FETCH_SUCCESS', credentials: results, searchedAddress: addr });
     } catch (e: unknown) {
-      dispatchCredential({ type: 'FETCH_ERROR', message: e instanceof Error ? e.message : String(e) });
+      dispatchCredential({ type: 'FETCH_ERROR', message: handleError(e) });
     }
   };
 
@@ -363,7 +364,7 @@ export default function CredentialsPanel({ verifyId }: { verifyId?: string | nul
       
       setIssueResult(`Credential issued successfully!\nID: ${mockId}\nEstimated fee: ${(estimatedFee / 10_000_000).toFixed(7)} XLM`);
     } catch (e: unknown) {
-      setIssueResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setIssueResult(`Error: ${handleError(e)}`);
     } finally {
       setIssuing(false);
     }
