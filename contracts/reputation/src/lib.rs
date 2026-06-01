@@ -38,6 +38,12 @@ pub enum ContractError {
 /// Minimum ledger interval between submissions from the same reporter for the same subject.
 const MIN_INTERVAL: u32 = 100;
 
+/// Max TTL for reputation records (~1 year)
+const TTL_MAX: u32 = 6_312_000;
+
+/// Max history items to keep per reporter-subject pair to bound storage
+const MAX_HISTORY: usize = 50;
+
 // ── Data types ────────────────────────────────────────────────────────────────
 
 /// Storage usage statistics for the reputation contract.
@@ -306,7 +312,10 @@ impl Reputation {
         reporter.require_auth();
         Self::require_reporter(&env, &reporter)?;
 
-        // Validate reason string length
+        // Validate inputs
+        if delta < -100 || delta > 100 {
+            panic!("Delta must be between -100 and 100");
+        }
         if reason.len() > 256 {
             return Err(ContractError::ReasonTooLong);
         }
@@ -324,6 +333,7 @@ impl Reputation {
             }
         }
         env.storage().persistent().set(&rate_key, &current_ledger);
+        env.storage().persistent().extend_ttl(&rate_key, TTL_MAX, TTL_MAX);
 
         let now = env.ledger().timestamp();
         let rec_key = Self::record_key(&subject);
@@ -353,6 +363,7 @@ impl Reputation {
         }
 
         env.storage().persistent().set(&rec_key, &record);
+        env.storage().persistent().extend_ttl(&rec_key, TTL_MAX, TTL_MAX);
 
         // Append to per-reporter history
         let mut history: Vec<ScoreEntry> = env
@@ -361,6 +372,10 @@ impl Reputation {
             .get(&history_key)
             .unwrap_or_else(|| Vec::new(&env));
 
+        if history.len() >= MAX_HISTORY as u32 {
+            history.remove(0); // Pop oldest to bound storage
+        }
+
         history.push_back(ScoreEntry {
             reporter: reporter.clone(),
             delta,
@@ -368,6 +383,7 @@ impl Reputation {
             submitted_at: now,
         });
         env.storage().persistent().set(&history_key, &history);
+        env.storage().persistent().extend_ttl(&history_key, TTL_MAX, TTL_MAX);
 
         // Increment total score entries counter
         let score_cnt: u32 = env.storage().instance().get(&SCORE_CNT).unwrap_or(0);
@@ -391,6 +407,9 @@ impl Reputation {
     /// * `subject` - The address whose reputation record to fetch.
     pub fn get_reputation(env: Env, subject: Address) -> ReputationRecord {
         let key = Self::record_key(&subject);
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().extend_ttl(&key, TTL_MAX, TTL_MAX);
+        }
         env.storage()
             .persistent()
             .get(&key)
@@ -432,6 +451,9 @@ impl Reputation {
         }
 
         let key = Self::history_key(&subject, &reporter);
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().extend_ttl(&key, TTL_MAX, TTL_MAX);
+        }
         let all: Vec<ScoreEntry> = env
             .storage()
             .persistent()
@@ -478,6 +500,9 @@ impl Reputation {
         min_reporters: u32,
     ) -> bool {
         let key = Self::record_key(&subject);
+        if env.storage().persistent().has(&key) {
+            env.storage().persistent().extend_ttl(&key, TTL_MAX, TTL_MAX);
+        }
         match env
             .storage()
             .persistent()
@@ -494,6 +519,7 @@ impl Reputation {
                 for reporter in active_reporters.iter() {
                     let history_key = Self::history_key(&subject, &reporter);
                     if env.storage().persistent().has(&history_key) {
+                        env.storage().persistent().extend_ttl(&history_key, TTL_MAX, TTL_MAX);
                         active_count += 1;
                     }
                 }
